@@ -11,6 +11,10 @@ const routes = [
     element: <Home />,
   },
   {
+    path: '/home',
+    element: <Home />,
+  },
+  {
     path: '/BLT',
     element: <BLT />,
   },
