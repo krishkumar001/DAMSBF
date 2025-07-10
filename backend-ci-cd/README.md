@@ -1,0 +1,1 @@
+# Remove any mention of Python, AI, or ai/ from the rest of the file 
