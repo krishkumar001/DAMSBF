@@ -1,0 +1,420 @@
+name: DAMS Backend CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, krish/backend, develop ]
+  pull_request:
+    branches: [ main, krish/backend ]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+        - staging
+        - production
+
+env:
+  NODE_VERSION: '18'
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  # ========================================
+  # CODE QUALITY & LINTING
+  # ========================================
+  
+  lint-backend:
+    runs-on: ubuntu-latest
+    name: Backend Linting & Code Quality
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run ESLint
+        run: npm run lint
+
+      - name: Run ESLint with fixes
+        run: npm run lint:fix
+
+      - name: Check code formatting
+        run: |
+          npx prettier --check "**/*.{js,json,md}"
+          npx prettier --check "routes/**/*.js"
+          npx prettier --check "bal/**/*.js"
+          npx prettier --check "dal/**/*.js"
+          npx prettier --check "models/**/*.js"
+          npx prettier --check "middleware/**/*.js"
+          npx prettier --check "config/**/*.js"
+
+      - name: Check for security vulnerabilities
+        run: npm audit --audit-level=moderate
+
+  # ========================================
+  # TESTING
+  # ========================================
+
+  test-backend:
+    runs-on: ubuntu-latest
+    name: Backend Testing
+    needs: [lint-backend]
+    services:
+      mongodb:
+        image: mongo:6.0
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --eval 'db.runCommand(\"ping\").ok'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests with coverage
+        env:
+          NODE_ENV: test
+          MONGODB_URI: mongodb://localhost:27017/dams-test
+          REDIS_URL: redis://localhost:6379
+          JWT_SECRET: test-secret-key-for-ci-cd-pipeline
+          PORT: 5001
+          RATE_LIMIT_WINDOW_MS: 900000
+          RATE_LIMIT_MAX_REQUESTS: 100
+          BCRYPT_ROUNDS: 10
+          LOG_LEVEL: error
+        run: |
+          npm run test:ci
+          npm run test:coverage
+
+      - name: Upload test coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage/lcov.info
+          flags: backend
+          name: backend-coverage
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: |
+            coverage/
+            test-results/
+          retention-days: 30
+
+  # ========================================
+  # SECURITY SCANNING
+  # ========================================
+
+  security-scan:
+    runs-on: ubuntu-latest
+    name: Security Scanning
+    needs: [test-backend]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run npm audit
+        run: npm audit --audit-level=moderate
+
+      - name: Run Snyk security scan
+        uses: snyk/actions/node@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --severity-threshold=high
+
+      - name: Check for secrets in code
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: .
+          base: HEAD~1
+          head: HEAD
+
+  # ========================================
+  # BUILD & PACKAGE
+  # ========================================
+
+  build-backend:
+    runs-on: ubuntu-latest
+    name: Build Backend
+    needs: [security-scan]
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install production dependencies
+        run: npm ci --only=production
+
+      - name: Create production package
+        run: |
+          tar -czf dams-backend-production.tar.gz \
+            --exclude=node_modules \
+            --exclude=coverage \
+            --exclude=*.log \
+            --exclude=.env* \
+            --exclude=__tests__ \
+            --exclude=test-*.js \
+            --exclude=debug-*.js \
+            --exclude=comprehensive-*.js \
+            .
+
+      - name: Upload production package
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-production-package
+          path: dams-backend-production.tar.gz
+          retention-days: 30
+
+      - name: Build Docker image
+        run: |
+          docker build -t dams-backend:${{ github.sha }} .
+          docker tag dams-backend:${{ github.sha }} dams-backend:latest
+
+      - name: Upload Docker image
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-image
+          path: |
+            dams-backend:${{ github.sha }}
+            dams-backend:latest
+          retention-days: 30
+
+  # ========================================
+  # DEPLOYMENT
+  # ========================================
+
+  deploy-staging:
+    runs-on: ubuntu-latest
+    name: Deploy to Staging
+    needs: [build-backend]
+    if: github.ref == 'refs/heads/krish/backend' || github.ref == 'refs/heads/develop' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'staging')
+    environment: staging
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to Railway Staging
+        uses: bervProject/railway-deploy@v1.0.0
+        with:
+          railway_token: ${{ secrets.RAILWAY_TOKEN_STAGING }}
+          service: dams-backend-staging
+          directory: .
+
+      - name: Wait for deployment
+        run: sleep 30
+
+      - name: Run health check
+        run: |
+          echo "Running health check for staging deployment..."
+          curl -f ${{ secrets.STAGING_BACKEND_URL }}/health || exit 1
+
+      - name: Run smoke tests
+        run: |
+          echo "Running smoke tests for staging..."
+          # Test basic endpoints
+          curl -f ${{ secrets.STAGING_BACKEND_URL }}/ || exit 1
+          curl -f ${{ secrets.STAGING_BACKEND_URL }}/api/health || exit 1
+
+  deploy-production:
+    runs-on: ubuntu-latest
+    name: Deploy to Production
+    needs: [build-backend]
+    if: github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production')
+    environment: production
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to Railway Production
+        uses: bervProject/railway-deploy@v1.0.0
+        with:
+          railway_token: ${{ secrets.RAILWAY_TOKEN_PRODUCTION }}
+          service: dams-backend-production
+          directory: .
+
+      - name: Wait for deployment
+        run: sleep 30
+
+      - name: Run health check
+        run: |
+          echo "Running health check for production deployment..."
+          curl -f ${{ secrets.PRODUCTION_BACKEND_URL }}/health || exit 1
+
+      - name: Run smoke tests
+        run: |
+          echo "Running smoke tests for production..."
+          # Test basic endpoints
+          curl -f ${{ secrets.PRODUCTION_BACKEND_URL }}/ || exit 1
+          curl -f ${{ secrets.PRODUCTION_BACKEND_URL }}/api/health || exit 1
+
+  # ========================================
+  # PERFORMANCE TESTING
+  # ========================================
+
+  performance-test:
+    runs-on: ubuntu-latest
+    name: Performance Testing
+    needs: [deploy-staging, deploy-production]
+    if: always() && (needs.deploy-staging.result == 'success' || needs.deploy-production.result == 'success')
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run performance tests
+        run: |
+          # Install artillery for load testing
+          npm install -g artillery
+          
+          # Run basic load test
+          artillery quick --count 10 --num 5 ${{ secrets.STAGING_BACKEND_URL }}/health
+          artillery quick --count 10 --num 5 ${{ secrets.PRODUCTION_BACKEND_URL }}/health
+
+  # ========================================
+  # MONITORING & NOTIFICATIONS
+  # ========================================
+
+  notify-success:
+    runs-on: ubuntu-latest
+    name: Notify Success
+    needs: [deploy-staging, deploy-production]
+    if: success() && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/krish/backend')
+    steps:
+      - name: Notify Slack Success
+        if: secrets.SLACK_WEBHOOK_URL
+        run: |
+          curl -X POST -H 'Content-type: application/json' \
+            --data '{
+              "text": "🎉 DAMS Backend deployment successful!",
+              "attachments": [{
+                "color": "good",
+                "fields": [
+                  {"title": "Environment", "value": "${{ github.ref == 'refs/heads/main' && 'Production' || 'Staging' }}", "short": true},
+                  {"title": "Branch", "value": "${{ github.ref_name }}", "short": true},
+                  {"title": "Commit", "value": "${{ github.sha }}", "short": true},
+                  {"title": "Author", "value": "${{ github.actor }}", "short": true},
+                  {"title": "Service", "value": "DAMS Backend API", "short": true}
+                ]
+              }]
+            }' \
+            ${{ secrets.SLACK_WEBHOOK_URL }}
+
+      - name: Create deployment summary
+        run: |
+          echo "## 🚀 DAMS Backend Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment:** ${{ github.ref == 'refs/heads/main' && 'Production' || 'Staging' }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Author:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### ✅ Deployment Status: SUCCESS" >> $GITHUB_STEP_SUMMARY
+          echo "### 🔗 Service URLs:" >> $GITHUB_STEP_SUMMARY
+          echo "- **Staging:** ${{ secrets.STAGING_BACKEND_URL }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Production:** ${{ secrets.PRODUCTION_BACKEND_URL }}" >> $GITHUB_STEP_SUMMARY
+
+  notify-failure:
+    runs-on: ubuntu-latest
+    name: Notify Failure
+    if: failure()
+    steps:
+      - name: Notify Slack Failure
+        if: secrets.SLACK_WEBHOOK_URL
+        run: |
+          curl -X POST -H 'Content-type: application/json' \
+            --data '{
+              "text": "❌ DAMS Backend deployment failed!",
+              "attachments": [{
+                "color": "danger",
+                "fields": [
+                  {"title": "Branch", "value": "${{ github.ref_name }}", "short": true},
+                  {"title": "Commit", "value": "${{ github.sha }}", "short": true},
+                  {"title": "Author", "value": "${{ github.actor }}", "short": true},
+                  {"title": "Workflow", "value": "${{ github.workflow }}", "short": true},
+                  {"title": "Service", "value": "DAMS Backend API", "short": true}
+                ]
+              }]
+            }' \
+            ${{ secrets.SLACK_WEBHOOK_URL }}
+
+      - name: Create issue on failure
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/krish/backend'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `🚨 DAMS Backend Deployment Failed - ${context.sha.substring(0, 7)}`,
+              body: `## DAMS Backend Deployment Failure
+
+              **Branch:** ${context.ref}
+              **Commit:** ${context.sha}
+              **Author:** ${context.actor}
+              **Workflow:** ${context.workflow}
+
+              Please check the [workflow run](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}) for details.
+
+              ### Next Steps:
+              1. Review the logs in GitHub Actions
+              2. Check Railway deployment logs
+              3. Verify environment variables
+              4. Test locally if needed
+              5. Fix the issue and re-deploy
+              `,
+              labels: ['bug', 'deployment-failure', 'backend']
+            }) 
