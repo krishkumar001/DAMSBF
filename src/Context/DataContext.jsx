@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { dashboardAPI, parameterAPI, alertAPI, equipmentAPI, authAPI } from '../Services/api';
 import LoginModal from '../Components/LoginModal';
 
@@ -36,7 +36,7 @@ export const DataProvider = ({ children }) => {
       setLoading(false);
       setShowLoginModal(true);
     }
-  }, []);
+  }, [refreshData]);
 
   // Fetch dashboard overview data
   const fetchDashboardData = async () => {
@@ -103,7 +103,7 @@ export const DataProvider = ({ children }) => {
   };
 
   // Refresh all data
-  const refreshData = async () => {
+  const refreshData = useCallback(async () => {
     if (!isAuthenticated) return;
     
     setLoading(true);
@@ -120,7 +120,7 @@ export const DataProvider = ({ children }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [isAuthenticated]);
 
   // Handle successful login
   const handleLoginSuccess = (loginData) => {
@@ -151,7 +151,7 @@ export const DataProvider = ({ children }) => {
     }, 30000);
 
     return () => clearInterval(interval);
-  }, [isAuthenticated]);
+  }, [isAuthenticated, refreshData]);
 
   const value = {
     dashboardData,

@@ -60,7 +60,7 @@ const SubmenuSidebar = ({ open, onClose, title, subPages }) => {
       <Divider />
       <List>
         {subPages && subPages.length > 0 ? (
-          subPages.map((sub, idx) => (
+          subPages.map((sub) => (
             <ListItem button key={sub} onClick={() => handleSubpageClick(sub)}>
               <ListItemText primary={sub} />
             </ListItem>

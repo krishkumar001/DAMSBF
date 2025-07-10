@@ -229,22 +229,26 @@ jobs:
   # DEPLOYMENT
   # ========================================
 
+# NOTE: Ensure all referenced secrets and environments are set in your GitHub repo settings.
+# Required secrets: SNYK_TOKEN, RAILWAY_TOKEN_STAGING, STAGING_BACKEND_URL, RAILWAY_TOKEN_PRODUCTION, PRODUCTION_BACKEND_URL, SLACK_WEBHOOK_URL
+# Required environments: staging, production (or remove the 'environment:' lines below if not using environments)
+
   deploy-staging:
     runs-on: ubuntu-latest
     name: Deploy to Staging
     needs: [build-backend]
     if: github.ref == 'refs/heads/krish/backend' || github.ref == 'refs/heads/develop' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'staging')
-    environment: staging
+    # environment: staging  # Uncomment if you have a 'staging' environment set up in GitHub repo settings
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Deploy to Railway Staging
-        uses: bervProject/railway-deploy@v1.0.0
+        uses: bervProject/railway-deploy@main
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN_STAGING }}
         with:
-          railway_token: ${{ secrets.RAILWAY_TOKEN_STAGING }}
           service: dams-backend-staging
-          directory: .
 
       - name: Wait for deployment
         run: sleep 30
@@ -257,7 +261,6 @@ jobs:
       - name: Run smoke tests
         run: |
           echo "Running smoke tests for staging..."
-          # Test basic endpoints
           curl -f ${{ secrets.STAGING_BACKEND_URL }}/ || exit 1
           curl -f ${{ secrets.STAGING_BACKEND_URL }}/api/health || exit 1
 
@@ -266,17 +269,17 @@ jobs:
     name: Deploy to Production
     needs: [build-backend]
     if: github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production')
-    environment: production
+    # environment: production  # Uncomment if you have a 'production' environment set up in GitHub repo settings
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Deploy to Railway Production
-        uses: bervProject/railway-deploy@v1.0.0
+        uses: bervProject/railway-deploy@main
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN_PRODUCTION }}
         with:
-          railway_token: ${{ secrets.RAILWAY_TOKEN_PRODUCTION }}
           service: dams-backend-production
-          directory: .
 
       - name: Wait for deployment
         run: sleep 30
@@ -289,7 +292,6 @@ jobs:
       - name: Run smoke tests
         run: |
           echo "Running smoke tests for production..."
-          # Test basic endpoints
           curl -f ${{ secrets.PRODUCTION_BACKEND_URL }}/ || exit 1
           curl -f ${{ secrets.PRODUCTION_BACKEND_URL }}/api/health || exit 1
 
@@ -334,7 +336,9 @@ jobs:
     if: success() && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/krish/backend')
     steps:
       - name: Notify Slack Success
-        if: secrets.SLACK_WEBHOOK_URL
+        if: ${{ env.SLACK_WEBHOOK_URL }}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         run: |
           curl -X POST -H 'Content-type: application/json' \
             --data '{
@@ -350,7 +354,7 @@ jobs:
                 ]
               }]
             }' \
-            ${{ secrets.SLACK_WEBHOOK_URL }}
+            $SLACK_WEBHOOK_URL
 
       - name: Create deployment summary
         run: |
@@ -372,7 +376,9 @@ jobs:
     if: failure()
     steps:
       - name: Notify Slack Failure
-        if: secrets.SLACK_WEBHOOK_URL
+        if: ${{ env.SLACK_WEBHOOK_URL }}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         run: |
           curl -X POST -H 'Content-type: application/json' \
             --data '{
@@ -388,7 +394,7 @@ jobs:
                 ]
               }]
             }' \
-            ${{ secrets.SLACK_WEBHOOK_URL }}
+            $SLACK_WEBHOOK_URL
 
       - name: Create issue on failure
         if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/krish/backend'

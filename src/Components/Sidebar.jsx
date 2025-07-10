@@ -14,13 +14,11 @@ import InfoIcon from '@mui/icons-material/Info';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 
 // Prevent 'collapsed' from being passed to the DOM
-const StyledListItemText = styled(({ collapsed, ...rest }) => (
-  <ListItemText {...rest} />
-))(({ collapsed }) => ({
-  display: collapsed ? 'none' : 'block',
-}));
+const StyledListItemText = styled((props) => (
+  <ListItemText {...props} />
+))(() => ({}));
 
-function Sidebar({ collapsed }) {
+function Sidebar({ collapsed: _collapsed }) {
   const location = useLocation();
 
   const menuItems = [
@@ -47,7 +45,7 @@ function Sidebar({ collapsed }) {
   ];
 
   return (
-    <div data-collapsed={collapsed}>
+    <div data-collapsed={_collapsed}>
       <List>
         {menuItems.map((item) => (
           <ListItem key={item.text} disablePadding sx={{ display: 'block' }}>
@@ -57,20 +55,20 @@ function Sidebar({ collapsed }) {
               selected={location.pathname === item.path}
               sx={{
                 minHeight: 48,
-                justifyContent: collapsed ? 'center' : 'initial',
+                justifyContent: _collapsed ? 'center' : 'initial',
                 px: 2.5,
               }}
             >
               <ListItemIcon
                 sx={{
                   minWidth: 0,
-                  mr: collapsed ? 'auto' : 3,
+                  mr: _collapsed ? 'auto' : 3,
                   justifyContent: 'center',
                 }}
               >
                 {item.icon}
               </ListItemIcon>
-              <StyledListItemText primary={item.text} collapsed={collapsed} />
+              <StyledListItemText primary={item.text} />
             </ListItemButton>
           </ListItem>
         ))}

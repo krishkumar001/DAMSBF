@@ -1,6 +1,6 @@
 // src/Components/Particles/ParticleAnimation.jsx
 import React from "react";
-import { motion } from "framer-motion";
+import { motion } from "framer-motion"; // eslint-disable-line no-unused-vars
 
 // A single particle with L-shape motion
 const Particle = ({ delay }) => (

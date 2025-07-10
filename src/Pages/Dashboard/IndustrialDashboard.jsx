@@ -58,7 +58,7 @@ const IndustrialDashboard = () => {
       setLoading(false);
     };
     fetchBLTParameters();
-  }, []);
+  }, [parameters]);
 
   useEffect(() => {
     const fetchDashboardData = async () => {

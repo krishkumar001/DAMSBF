@@ -281,7 +281,6 @@ function Home() {
                   overflow: 'visible',
                   minHeight: 210,
                   background: 'rgba(255,255,255,0.25)',
-                  boxShadow: '0 8px 32px 0 rgba(31, 38, 135, 0.18)',
                   backdropFilter: 'blur(8px)',
                   border: '2.5px solid',
                   borderImage: hoveredCard === card.name
@@ -290,6 +289,7 @@ function Home() {
                   transition: 'transform 0.25s cubic-bezier(.4,2,.3,1), box-shadow 0.2s, border-image 1s',
                   boxSizing: 'border-box',
                   transform: tilt[card.name] || 'rotateX(0deg) rotateY(0deg)',
+                  boxShadow: '0 8px 32px 0 rgba(31, 38, 135, 0.18)',
                   '&:hover': {
                     boxShadow: '0 16px 40px 0 rgba(253,160,133,0.25), 0 2px 8px 0 #f6d36544',
                   },
