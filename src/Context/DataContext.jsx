@@ -151,7 +151,7 @@ export const DataProvider = ({ children }) => {
     }, 30000);
 
     return () => clearInterval(interval);
-  }, [isAuthenticated]);
+  }, [isAuthenticated, refreshData]);
 
   const value = {
     dashboardData,

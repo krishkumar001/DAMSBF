@@ -75,24 +75,5 @@ module.exports = {
   testResultsProcessor: 'jest-sonar-reporter',
   
   // Coverage directory
-  coverageDirectory: 'coverage',
-  
-  // Collect coverage from specific directories
-  collectCoverageFrom: [
-    'routes/**/*.js',
-    'bal/**/*.js',
-    'dal/**/*.js',
-    'models/**/*.js',
-    'middleware/**/*.js',
-    'config/**/*.js',
-    '!**/node_modules/**',
-    '!**/coverage/**',
-    '!**/logs/**',
-    '!**/scripts/**',
-    '!**/test-*.js',
-    '!**/debug-*.js',
-    '!**/comprehensive-*.js',
-    '!jest.config.js',
-    '!server.js'
-  ]
+  coverageDirectory: 'coverage'
 }; 

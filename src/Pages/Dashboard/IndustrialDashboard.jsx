@@ -74,7 +74,7 @@ const IndustrialDashboard = () => {
       }
     };
     fetchDashboardData();
-  }, []);
+  }, [parameters]);
 
   const handleCardClick = (parameter) => {
     setSelectedParameter(parameter);
