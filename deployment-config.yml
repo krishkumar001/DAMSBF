@@ -1,0 +1,235 @@
+# DAMS Deployment Configuration
+# This file contains all deployment settings for different environments
+
+environments:
+  staging:
+    name: "Staging Environment"
+    description: "Pre-production environment for testing"
+    
+    frontend:
+      platform: "github-pages"
+      url: "https://krishkumar001.github.io/DAMSBF/staging"
+      build_command: "npm run build"
+      output_directory: "dist"
+      
+    backend:
+      platform: "railway"
+      service_name: "dams-backend-staging"
+      health_check_url: "/health"
+      environment_variables:
+        NODE_ENV: "staging"
+        PORT: "5000"
+        MONGODB_URI: "${MONGODB_URI_STAGING}"
+        REDIS_URL: "${REDIS_URL_STAGING}"
+        JWT_SECRET: "${JWT_SECRET_STAGING}"
+        FRONTEND_URL: "https://krishkumar001.github.io/DAMSBF/staging"
+        
+    database:
+      platform: "mongodb-atlas"
+      cluster_name: "dams-staging"
+      database_name: "dams-staging"
+      
+    redis:
+      platform: "redis-cloud"
+      plan: "free"
+      
+    monitoring:
+      enabled: true
+      platform: "railway"
+      alerts:
+        - type: "error_rate"
+          threshold: 5
+        - type: "response_time"
+          threshold: 2000
+
+  production:
+    name: "Production Environment"
+    description: "Live production environment"
+    
+    frontend:
+      platform: "github-pages"
+      url: "https://krishkumar001.github.io/DAMSBF"
+      build_command: "npm run build"
+      output_directory: "dist"
+      custom_domain: "${CUSTOM_DOMAIN}"
+      
+    backend:
+      platform: "railway"
+      service_name: "dams-backend-production"
+      health_check_url: "/health"
+      environment_variables:
+        NODE_ENV: "production"
+        PORT: "5000"
+        MONGODB_URI: "${MONGODB_URI_PRODUCTION}"
+        REDIS_URL: "${REDIS_URL_PRODUCTION}"
+        JWT_SECRET: "${JWT_SECRET_PRODUCTION}"
+        FRONTEND_URL: "https://krishkumar001.github.io/DAMSBF"
+        
+    database:
+      platform: "mongodb-atlas"
+      cluster_name: "dams-production"
+      database_name: "dams-production"
+      backup_enabled: true
+      backup_frequency: "daily"
+      
+    redis:
+      platform: "redis-cloud"
+      plan: "pro"
+      
+    monitoring:
+      enabled: true
+      platform: "railway"
+      alerts:
+        - type: "error_rate"
+          threshold: 1
+        - type: "response_time"
+          threshold: 1000
+        - type: "uptime"
+          threshold: 99.9
+
+# CI/CD Pipeline Configuration
+pipeline:
+  triggers:
+    - push:
+        branches: ["main", "develop"]
+    - pull_request:
+        branches: ["main", "develop"]
+    - workflow_dispatch:
+        inputs:
+          environment:
+            description: "Environment to deploy to"
+            required: true
+            default: "staging"
+            type: choice
+            options: ["staging", "production"]
+  
+  stages:
+    - name: "Code Quality"
+      jobs: ["lint-frontend", "lint-backend", "lint-ai"]
+      parallel: true
+      
+    - name: "Testing"
+      jobs: ["test-frontend", "test-backend", "test-ai"]
+      parallel: true
+      depends_on: ["Code Quality"]
+      
+    - name: "Security"
+      jobs: ["security-scan"]
+      depends_on: ["Testing"]
+      
+    - name: "Build"
+      jobs: ["build-frontend", "build-backend"]
+      parallel: true
+      depends_on: ["Security"]
+      
+    - name: "Deploy Staging"
+      jobs: ["deploy-staging"]
+      depends_on: ["Build"]
+      conditions:
+        - github.ref == "refs/heads/develop"
+        - github.event_name == "workflow_dispatch" && github.event.inputs.environment == "staging"
+        
+    - name: "Deploy Production"
+      jobs: ["deploy-production"]
+      depends_on: ["Build"]
+      conditions:
+        - github.ref == "refs/heads/main"
+        - github.event_name == "workflow_dispatch" && github.event.inputs.environment == "production"
+        
+    - name: "Notify"
+      jobs: ["notify-success", "notify-failure"]
+      depends_on: ["Deploy Staging", "Deploy Production"]
+
+# Required Secrets
+required_secrets:
+  # Railway Tokens
+  - name: "RAILWAY_TOKEN_STAGING"
+    description: "Railway token for staging deployment"
+    required: true
+    
+  - name: "RAILWAY_TOKEN_PRODUCTION"
+    description: "Railway token for production deployment"
+    required: true
+    
+  # Database URLs
+  - name: "MONGODB_URI_STAGING"
+    description: "MongoDB connection string for staging"
+    required: true
+    
+  - name: "MONGODB_URI_PRODUCTION"
+    description: "MongoDB connection string for production"
+    required: true
+    
+  # Redis URLs
+  - name: "REDIS_URL_STAGING"
+    description: "Redis connection string for staging"
+    required: false
+    
+  - name: "REDIS_URL_PRODUCTION"
+    description: "Redis connection string for production"
+    required: false
+    
+  # JWT Secrets
+  - name: "JWT_SECRET_STAGING"
+    description: "JWT secret for staging environment"
+    required: true
+    
+  - name: "JWT_SECRET_PRODUCTION"
+    description: "JWT secret for production environment"
+    required: true
+    
+  # Frontend URLs (for CORS)
+  - name: "STAGING_FRONTEND_URL"
+    description: "Staging frontend URL for smoke tests"
+    required: true
+    
+  - name: "PRODUCTION_FRONTEND_URL"
+    description: "Production frontend URL for smoke tests"
+    required: true
+    
+  # Backend URLs (for smoke tests)
+  - name: "STAGING_BACKEND_URL"
+    description: "Staging backend URL for smoke tests"
+    required: true
+    
+  - name: "PRODUCTION_BACKEND_URL"
+    description: "Production backend URL for smoke tests"
+    required: true
+    
+  # Optional: Slack notifications
+  - name: "SLACK_WEBHOOK_URL"
+    description: "Slack webhook URL for notifications"
+    required: false
+    
+  # Optional: Custom domain
+  - name: "CUSTOM_DOMAIN"
+    description: "Custom domain for production frontend"
+    required: false
+
+# Health Check Configuration
+health_checks:
+  frontend:
+    endpoint: "/health"
+    expected_status: 200
+    timeout: 5000
+    retries: 3
+    
+  backend:
+    endpoint: "/health"
+    expected_status: 200
+    timeout: 10000
+    retries: 3
+    expected_response:
+      status: "OK"
+      environment: "production"
+
+# Rollback Configuration
+rollback:
+  enabled: true
+  max_versions: 5
+  automatic_rollback:
+    enabled: true
+    conditions:
+      - error_rate > 10
+      - response_time > 5000
+      - health_check_failure > 3 

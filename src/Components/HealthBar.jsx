@@ -11,7 +11,7 @@ const HealthBar = ({ percentage }) => {
     <div className="w-full bg-gray-300 h-2 rounded mt-1">
       <div
         className={`h-2 rounded ${getColor()}`}
-        style={`{ width: ${percentage}% }`}
+        style={{ width: `${percentage}%` }}
       ></div>
     </div>
   );

@@ -13,4 +13,20 @@ body {
   flex-grow: 1;
   padding: 20px;
 }
+
+.sparkle-burst {
+  animation: sparkle-burst 0.7s linear;
+}
+.ripple-anim {
+  animation: ripple-anim 0.4s linear;
+}
+@keyframes sparkle-burst {
+  0% { opacity: 1; transform: scale(0.5);}
+  80% { opacity: 0.7; transform: scale(1.2);}
+  100% { opacity: 0; transform: scale(2.2);}
+}
+@keyframes ripple-anim {
+  0% { opacity: 0.7; transform: scale(0.5);}
+  100% { opacity: 0; transform: scale(2.2);}
+}
 @import "tailwindcss";

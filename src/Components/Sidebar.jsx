@@ -39,33 +39,35 @@ function Sidebar({ collapsed }) {
   ];
 
   return (
-    <List>
-      {menuItems.map((item) => (
-        <ListItem key={item.text} disablePadding sx={{ display: 'block' }}>
-          <ListItemButton
-            component={Link}
-            to={item.path}
-            selected={location.pathname === item.path}
-            sx={{
-              minHeight: 48,
-              justifyContent: collapsed ? 'center' : 'initial',
-              px: 2.5,
-            }}
-          >
-            <ListItemIcon
+    <div data-collapsed={collapsed}>
+      <List>
+        {menuItems.map((item) => (
+          <ListItem key={item.text} disablePadding sx={{ display: 'block' }}>
+            <ListItemButton
+              component={Link}
+              to={item.path}
+              selected={location.pathname === item.path}
               sx={{
-                minWidth: 0,
-                mr: collapsed ? 'auto' : 3,
-                justifyContent: 'center',
+                minHeight: 48,
+                justifyContent: collapsed ? 'center' : 'initial',
+                px: 2.5,
               }}
             >
-              {item.icon}
-            </ListItemIcon>
-            <StyledListItemText primary={item.text} collapsed={collapsed} />
-          </ListItemButton>
-        </ListItem>
-      ))}
-    </List>
+              <ListItemIcon
+                sx={{
+                  minWidth: 0,
+                  mr: collapsed ? 'auto' : 3,
+                  justifyContent: 'center',
+                }}
+              >
+                {item.icon}
+              </ListItemIcon>
+              <StyledListItemText primary={item.text} collapsed={collapsed} />
+            </ListItemButton>
+          </ListItem>
+        ))}
+      </List>
+    </div>
   );
 }
 

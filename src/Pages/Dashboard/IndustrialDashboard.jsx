@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import InfoCardComponent from "../../Components/InfoCardComponent";
 import CircularProgress from "../../Components/CircularProgress";
 import AlertCard from "../../Components/AlertCard";
@@ -10,10 +10,71 @@ import ComplianceBarGraph from "../../Components/ComplianceBarGraph";
 import VisualizationPanel from "../../Components/VisualizationPanel";
 import AlertSummaryBox from "../../Components/AlertSummaryBox";
 import TrendAnalysisModal from "../../Components/TrendAnalysisModal";
+import { parameterAPI } from "../../Services/api";
+import { equipmentAPI } from "../../Services/api";
+import { dashboardAPI } from "../../Services/api";
+import HealthBar from "../../Components/HealthBar";
 
 const IndustrialDashboard = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedParameter, setSelectedParameter] = useState(null);
+  const [parameters, setParameters] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [dashboardOverview, setDashboardOverview] = useState(null);
+  const [dashboardHealth, setDashboardHealth] = useState(null);
+
+  console.log("IndustrialDashboard component loaded");
+
+  useEffect(() => {
+    const fetchBLTParameters = async () => {
+      setLoading(true);
+      try {
+        // Fetch all equipment and find BLT
+        const equipmentRes = await equipmentAPI.getAll();
+        const bltEquipment = equipmentRes.data.find(
+          (eq) => eq.name && eq.name.toLowerCase() === "blt"
+        );
+        console.log("BLT Equipment:", bltEquipment);
+        if (!bltEquipment) {
+          setParameters([]);
+          setLoading(false);
+          return;
+        }
+        // Fetch all parameters and filter for BLT
+        const paramRes = await parameterAPI.getAll({ limit: 50 });
+        console.log("All Parameters:", paramRes.data);
+        const bltParameters = paramRes.data.filter(
+          (param) => param.equipmentId?.toString() === bltEquipment._id?.toString()
+        );
+        console.log("Filtered BLT Parameters:", bltParameters);
+        parameters.forEach(param => {
+          console.log('Parameter:', param.displayName, 'Equipment:', param.equipment);
+        });
+        setParameters(bltParameters);
+      } catch (err) {
+        setParameters([]);
+        console.error("Error fetching BLT parameters:", err);
+      }
+      setLoading(false);
+    };
+    fetchBLTParameters();
+  }, []);
+
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      try {
+        const overviewRes = await dashboardAPI.getOverview();
+        setDashboardOverview(overviewRes.data);
+        const healthRes = await dashboardAPI.getHealth();
+        setDashboardHealth(healthRes.data);
+      } catch (err) {
+        setDashboardOverview(null);
+        setDashboardHealth(null);
+        console.error("Error fetching dashboard data:", err);
+      }
+    };
+    fetchDashboardData();
+  }, []);
 
   const handleCardClick = (parameter) => {
     setSelectedParameter(parameter);
@@ -25,129 +86,9 @@ const IndustrialDashboard = () => {
     setSelectedParameter(null);
   };
 
-  const parameters = [
-  {
-    title: "Wind Volume(Nm³/hr)",
-    amount: "33629.1",
-    value: 33629.1,
-    ucl: 35000,
-    lcl: 30000, // ✅ Green
-  },
-  {
-    title: "HBT",
-    amount: "5.5°C",
-    value: 5.5,
-    ucl: 5.0,
-    lcl: -2.0, // 🔴 Red (above UCL)
-  },
-  {
-    title: "PCI Rate (Tons/hr)",
-    amount: "62.0",
-    value: 62.0,
-    ucl: 65.0,
-    lcl: 50.0, // 🟡 Yellow (close to UCL)
-  },
-  {
-    title: "Hopper-1 Weight",
-    amount: "45.0 T",
-    value: 90.0,
-    ucl: 70.0,
-    lcl: 40.0, // ✅ Green
-  },
-  {
-    title: "LMG - 1 Operating Time",
-    amount: "2.5s",
-    value: 2.5,
-    ucl: 5.0,
-    lcl: 3.0, // 🔴 Red (below LCL)
-  },
-  {
-    title: "GB Casting Temperature",
-    amount: "79.0°C",
-    value: 79.0,
-    ucl: 80.0,
-    lcl: 30.0, // 🟡 Yellow (near UCL)
-  },
-  {
-    title: "Chute Rotating Angle",
-    amount: "201.0°",
-    value: 201.0,
-    ucl: 200.0,
-    lcl: 100.0, // 🔴 Red (above UCL)
-  },
-  {
-    title: "Hydraulic Pressure",
-    amount: "180.0 Bar",
-    value: 180.0,
-    ucl: 220.0,
-    lcl: 150.0, // ✅ Green
-  },
-  {
-    title: "Oil Tank Particle Counter",
-    amount: "19.0 | 18.5 | 17.8",
-    value: 18.4,
-    ucl: 20.0,
-    lcl: 5.0, // 🟡 Yellow
-  },
-  {
-    title: "HBP",
-    amount: "4.1 Bar",
-    value: 4.1,
-    ucl: 6.0,
-    lcl: 4.5, // 🔴 Red (below LCL)
-  },
-  {
-    title: "PCI Rate (Kg/THM)",
-    amount: "205.0",
-    value: 205.0,
-    ucl: 220.0,
-    lcl: 180.0, // ✅ Green
-  },
-  {
-    title: "Hopper-2 Weight",
-    amount: "98.0 T",
-    value: 10.0,
-    ucl: 100.0,
-    lcl: 40.0, // ✅ Green
-  },
-  {
-    title: "LMG - 2 Operating Time",
-    amount: "3.0s",
-    value: 3.0,
-    ucl: 5.0,
-    lcl: 3.0, // 🟡 Yellow (on edge of LCL)
-  },
-  {
-    title: "GB Oil Temperature",
-    amount: "28.0°C",
-    value: 28.0,
-    ucl: 60.0,
-    lcl: 30.0, // 🔴 Red (below LCL)
-  },
-  {
-    title: "Chute Tilting Angle",
-    amount: "58.0°",
-    value: 58.0,
-    ucl: 60.0,
-    lcl: 20.0, // ✅ Green
-  },
-  {
-    title: "Hydraulic Pump Status",
-    amount: "PUMP - 1",
-    value: 1,
-    ucl: 2,
-    lcl: 0, // ✅ Green (assuming PUMP - 1 is valid)
-  },
-  {
-    title: "Gearbox Temperature",
-    amount: "85.0°C",
-    value: 85.0,
-    ucl: 80.0,
-    lcl: 30.0, // 🔴 Red (above UCL)
-  },
-];
-
-
+  if (loading) {
+    return <div className="p-8 text-center">Loading BLT parameters...</div>;
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -160,12 +101,12 @@ const IndustrialDashboard = () => {
               PARAMETERS
             </h2>
             <div className="space-y-1.5">
-              {parameters.slice(0,7).map((param, index) => (
+              {parameters.slice(0, Math.ceil(parameters.length/2)).map((param, index) => (
                 <InfoCardComponent
-                  key={index}
-                  title={param.title}
-                  amount={param.amount}
-                  value={param.value}
+                  key={param._id || index}
+                  title={param.displayName}
+                  amount={param.target + (param.unit ? ` ${param.unit}` : "")}
+                  value={param.target}
                   ucl={param.ucl}
                   lcl={param.lcl}
                   size="small"
@@ -189,18 +130,7 @@ const IndustrialDashboard = () => {
               {/* Bottom Parameters below image */}
             </div>
               <div className="flex justify-around bg-white rounded-lg shadow-sm border p-4 mt-4">
-                {parameters.slice(7, 10).map((param, index) => (
-                  <InfoCardComponent
-                    key={index}
-                    title={param.title}
-                    amount={param.amount}
-                    value={param.value}
-                    ucl={param.ucl}
-                    lcl={param.lcl}
-                    size="small"
-                    onClick={() => handleCardClick(param)}
-                  />
-                ))}
+                {/* Optionally show some parameters here if needed */}
               </div>
 
             {/* Visualization Panel */}
@@ -213,12 +143,12 @@ const IndustrialDashboard = () => {
               PARAMETERS
             </h2>
             <div className="space-y-1.5">
-              {parameters.slice(10,18).map((param, index) => (
+              {parameters.slice(Math.ceil(parameters.length/2)).map((param, index) => (
                 <InfoCardComponent
-                  key={index}
-                  title={param.title}
-                  amount={param.amount}
-                  value={param.value}
+                  key={param._id || index}
+                  title={param.displayName}
+                  amount={param.target + (param.unit ? ` ${param.unit}` : "")}
+                  value={param.target}
                   ucl={param.ucl}
                   lcl={param.lcl}
                   size="small"
@@ -252,10 +182,24 @@ const IndustrialDashboard = () => {
             <div className="">
               {/* Alert Graph */}
               <div className="">
-                <AlertBarGraph />
+                <AlertBarGraph
+                  data={dashboardOverview ? [
+                    { name: "Charge", value: dashboardOverview.alertParameters || 0 },
+                    { name: "Valve", value: dashboardOverview.activeParameters || 0 },
+                    { name: "Cooling", value: dashboardOverview.normalParameters || 0 },
+                    { name: "Hydraulic", value: dashboardOverview.totalParameters || 0 },
+                  ] : undefined}
+                />
               </div>
               <div className="">
-                <ComplianceBarGraph />
+                <ComplianceBarGraph value={dashboardOverview ? dashboardOverview.overallHealth : 0} />
+              </div>
+            </div>
+            <div className="bg-white rounded-lg shadow-sm border p-4 mt-4">
+              <div className="font-semibold text-center mb-2">Overall Health</div>
+              <div className="flex items-center gap-2 mb-4">
+                <span>{dashboardHealth?.overall?.healthPercentage || 0}%</span>
+                <HealthBar percentage={dashboardHealth?.overall?.healthPercentage || 0} />
               </div>
             </div>
           </div>
